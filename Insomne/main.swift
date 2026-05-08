@@ -1,5 +1,11 @@
 import AppKit
 
+// ─── Constantes ────────────────────────────────────────────────────────────
+
+let GITHUB_USER    = "TU_USUARIO"   // ← cambia esto por tu usuario de GitHub
+let GITHUB_REPO    = "insomne"      // ← cambia esto por el nombre del repo
+let CURRENT_VERSION = "1.0"
+
 // ─── AppDelegate ───────────────────────────────────────────────────────────
 
 class AppDelegate: NSObject, NSApplicationDelegate {
@@ -20,9 +26,33 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         buildMenu()
 
         setupSudoersIfNeeded()
+
+        // Comprobar actualizaciones al arrancar (en background)
+        DispatchQueue.global(qos: .background).asyncAfter(deadline: .now() + 2) {
+            self.checkForUpdates(silent: true)
+        }
+
+        // Escuchar cambios de tema del sistema
+        DistributedNotificationCenter.default().addObserver(
+            self,
+            selector: #selector(themeChanged),
+            name: NSNotification.Name("AppleInterfaceThemeChangedNotification"),
+            object: nil
+        )
     }
 
-    // MARK: - Sudoers (una sola vez)
+    // MARK: - Tema del sistema
+
+    @objc func themeChanged() {
+        updateStatusIcon()
+    }
+
+    func isDarkMode() -> Bool {
+        let appearance = NSApp.effectiveAppearance
+        return appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+    }
+
+    // MARK: - Sudoers
 
     func setupSudoersIfNeeded() {
         guard !FileManager.default.fileExists(atPath: sudoersFile) else { return }
@@ -72,9 +102,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         let toggleItem = NSMenuItem(
             title: isEnabled ? "Apagar" : "Encender",
-            action: #selector(toggleInsomne), keyEquivalent: "t")
+            action: #selector(toggleLidLock), keyEquivalent: "t")
         toggleItem.target = self
         menu.addItem(toggleItem)
+
+        menu.addItem(.separator())
+
+        let updateItem = NSMenuItem(
+            title: "Buscar actualizaciones",
+            action: #selector(checkUpdatesManual), keyEquivalent: "u")
+        updateItem.target = self
+        menu.addItem(updateItem)
+
         menu.addItem(.separator())
 
         let quitItem = NSMenuItem(
@@ -86,9 +125,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem.menu = menu
     }
 
-    // MARK: - Actions
+    // MARK: - Toggle
 
-    @objc func toggleInsomne() {
+    @objc func toggleLidLock() {
         let newValue = isEnabled ? "0" : "1"
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
@@ -104,10 +143,93 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    // MARK: - Actualizaciones
+
+    @objc func checkUpdatesManual() {
+        checkForUpdates(silent: false)
+    }
+
+    func checkForUpdates(silent: Bool) {
+        let urlString = "https://api.github.com/repos/\(GITHUB_USER)/\(GITHUB_REPO)/releases/latest"
+        guard let url = URL(string: urlString) else { return }
+
+        var request = URLRequest(url: url)
+        request.setValue("application/vnd.github.v3+json", forHTTPHeaderField: "Accept")
+        request.setValue("Insomne/\(CURRENT_VERSION)", forHTTPHeaderField: "User-Agent")
+
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            guard let data = data, error == nil else {
+                if !silent {
+                    DispatchQueue.main.async { self.showUpdateError() }
+                }
+                return
+            }
+
+            guard
+                let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                let tagName = json["tag_name"] as? String
+            else {
+                if !silent {
+                    DispatchQueue.main.async { self.showUpdateError() }
+                }
+                return
+            }
+
+            // Limpiar el tag (quitar "v" si tiene)
+            let latestVersion = tagName.trimmingCharacters(in: .init(charactersIn: "v"))
+
+            DispatchQueue.main.async {
+                if latestVersion != CURRENT_VERSION {
+                    // Hay actualización disponible
+                    let downloadUrl = json["html_url"] as? String ?? ""
+                    self.showUpdateAvailable(version: latestVersion, url: downloadUrl, releaseNotes: json["body"] as? String)
+                } else if !silent {
+                    // Sin actualizaciones (solo mostrar si el usuario lo pidió manualmente)
+                    self.showNoUpdates()
+                }
+            }
+        }.resume()
+    }
+
+    func showUpdateAvailable(version: String, url: String, releaseNotes: String?) {
+        let alert = NSAlert()
+        alert.messageText = "🎉 Actualización disponible: v\(version)"
+        alert.informativeText = releaseNotes.map { notes in
+            "Versión actual: \(CURRENT_VERSION)\n\nNovedades:\n\(notes)"
+        } ?? "Hay una nueva versión disponible (v\(version)).\nVersión actual: \(CURRENT_VERSION)"
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "Descargar")
+        alert.addButton(withTitle: "Ahora no")
+
+        if alert.runModal() == .alertFirstButtonReturn {
+            if let downloadURL = URL(string: url) {
+                NSWorkspace.shared.open(downloadURL)
+            }
+        }
+    }
+
+    func showNoUpdates() {
+        let alert = NSAlert()
+        alert.messageText = "✅ Insomne está al día"
+        alert.informativeText = "Tienes la última versión instalada (v\(CURRENT_VERSION))."
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "OK")
+        alert.runModal()
+    }
+
+    func showUpdateError() {
+        let alert = NSAlert()
+        alert.messageText = "No se pudo comprobar actualizaciones"
+        alert.informativeText = "Comprueba tu conexión a internet e inténtalo de nuevo."
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "OK")
+        alert.runModal()
+    }
+
+    // MARK: - Quit
+
     @objc func quitApp() {
-        print("DEBUG: quitApp llamado, PID: \(ProcessInfo.processInfo.processIdentifier)")
         if isEnabled { _ = runPmset(value: "0"); saveState(false) }
-        // Eliminar sudoers sin pedir contraseña (usamos sudo mientras aún tenemos acceso)
         let task = Process()
         task.launchPath = "/usr/bin/sudo"
         task.arguments = ["rm", "-f", sudoersFile]
@@ -132,7 +254,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 if task.terminationStatus == 0 { return true }
             } catch {}
         }
-        // Fallback osascript
         let script = "do shell script \"/usr/bin/pmset -a disablesleep \(value)\" with administrator privileges"
         var error: NSDictionary?
         NSAppleScript(source: script)?.executeAndReturnError(&error)

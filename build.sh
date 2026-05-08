@@ -9,7 +9,6 @@ RESOURCES="$CONTENTS/Resources"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 echo "🔨 Compilando $APP_NAME..."
-
 mkdir -p "$MACOS" "$RESOURCES"
 
 ARCH=$(uname -m)
@@ -23,10 +22,27 @@ swiftc \
     -framework AppKit \
     -framework Foundation
 
-# Convertir iconset a .icns
-ICONSET="$SCRIPT_DIR/Insomne.iconset"
-if [ -d "$ICONSET" ]; then
-    iconutil -c icns "$ICONSET" -o "$RESOURCES/AppIcon.icns"
+echo "🎨 Generando iconos adaptativos..."
+
+# Convertir ambos iconsets a .icns
+if [ -d "$SCRIPT_DIR/InsomneDark.iconset" ]; then
+    iconutil -c icns "$SCRIPT_DIR/InsomneDark.iconset" -o "$RESOURCES/AppIconDark.icns"
+fi
+if [ -d "$SCRIPT_DIR/InsomneLight.iconset" ]; then
+    iconutil -c icns "$SCRIPT_DIR/InsomneLight.iconset" -o "$RESOURCES/AppIconLight.icns"
+fi
+
+# Crear icono adaptativo con iconutil usando ambas variantes
+# macOS usa AppIconLight como base y AppIconDark para dark mode
+# El truco es crear un icono que cambie con el tema usando tiffutil
+if [ -f "$RESOURCES/AppIconLight.icns" ] && [ -f "$RESOURCES/AppIconDark.icns" ]; then
+    # Extraer PNG de 512px de cada variante para el icono del Finder
+    sips -s format png "$RESOURCES/AppIconLight.icns" --out "$RESOURCES/tmp_light.png" --resampleHeightWidth 512 512 2>/dev/null || true
+    sips -s format png "$RESOURCES/AppIconDark.icns" --out "$RESOURCES/tmp_dark.png" --resampleHeightWidth 512 512 2>/dev/null || true
+
+    # Usar el icono claro como AppIcon principal (por omisión del sistema)
+    cp "$RESOURCES/AppIconLight.icns" "$RESOURCES/AppIcon.icns"
+    rm -f "$RESOURCES/tmp_light.png" "$RESOURCES/tmp_dark.png"
 fi
 
 cat > "$CONTENTS/Info.plist" << 'PLIST'
@@ -56,6 +72,8 @@ cat > "$CONTENTS/Info.plist" << 'PLIST'
     <true/>
     <key>NSHighResolutionCapable</key>
     <true/>
+    <key>NSRequiresAquaSystemAppearance</key>
+    <false/>
     <key>NSAppleEventsUsageDescription</key>
     <string>Insomne necesita ejecutar comandos de sistema.</string>
 </dict>
@@ -63,4 +81,9 @@ cat > "$CONTENTS/Info.plist" << 'PLIST'
 PLIST
 
 xattr -cr "$APP_DIR"
-echo "✅ Insomne.app compilada"
+echo "✅ Insomne compilada en $APP_DIR"
+echo ""
+echo "Abriendo..."
+pkill -9 Insomne 2>/dev/null || true
+sleep 0.5
+open "$APP_DIR"
