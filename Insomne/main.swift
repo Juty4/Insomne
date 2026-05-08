@@ -2,9 +2,10 @@ import AppKit
 
 // ─── Constantes ────────────────────────────────────────────────────────────
 
-let GITHUB_USER    = "TU_USUARIO"   // ← cambia esto por tu usuario de GitHub
-let GITHUB_REPO    = "insomne"      // ← cambia esto por el nombre del repo
-let CURRENT_VERSION = "1.0"
+let GITHUB_USER    = "Juty4"
+let GITHUB_REPO    = "Insomne"
+// Este valor se reemplaza automáticamente por el SHA del commit al compilar con build.sh
+let CURRENT_BUILD  = "BUILD_SHA"
 
 // ─── AppDelegate ───────────────────────────────────────────────────────────
 
@@ -150,55 +151,54 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func checkForUpdates(silent: Bool) {
-        let urlString = "https://api.github.com/repos/\(GITHUB_USER)/\(GITHUB_REPO)/releases/latest"
+        // Compara el SHA del último commit en main con el que tiene instalado
+        let urlString = "https://api.github.com/repos/\(GITHUB_USER)/\(GITHUB_REPO)/commits/main"
         guard let url = URL(string: urlString) else { return }
 
         var request = URLRequest(url: url)
         request.setValue("application/vnd.github.v3+json", forHTTPHeaderField: "Accept")
-        request.setValue("Insomne/\(CURRENT_VERSION)", forHTTPHeaderField: "User-Agent")
+        request.setValue("Insomne/\(CURRENT_BUILD)", forHTTPHeaderField: "User-Agent")
 
         URLSession.shared.dataTask(with: request) { data, response, error in
             guard let data = data, error == nil else {
-                if !silent {
-                    DispatchQueue.main.async { self.showUpdateError() }
-                }
+                if !silent { DispatchQueue.main.async { self.showUpdateError() } }
                 return
             }
 
             guard
                 let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                let tagName = json["tag_name"] as? String
+                let sha = json["sha"] as? String
             else {
-                if !silent {
-                    DispatchQueue.main.async { self.showUpdateError() }
-                }
+                if !silent { DispatchQueue.main.async { self.showUpdateError() } }
                 return
             }
 
-            // Limpiar el tag (quitar "v" si tiene)
-            let latestVersion = tagName.trimmingCharacters(in: .init(charactersIn: "v"))
+            // SHA corto (7 caracteres) para comparar
+            let latestSHA = String(sha.prefix(7))
+            let repoURL = "https://github.com/\(GITHUB_USER)/\(GITHUB_REPO)"
+
+            // Leer el mensaje del último commit
+            let commitMessage = (json["commit"] as? [String: Any])
+                .flatMap { $0["message"] as? String }
+                .map { $0.components(separatedBy: "\n").first ?? $0 }
+                ?? "Nueva actualización disponible"
 
             DispatchQueue.main.async {
-                if latestVersion != CURRENT_VERSION {
-                    // Hay actualización disponible
-                    let downloadUrl = json["html_url"] as? String ?? ""
-                    self.showUpdateAvailable(version: latestVersion, url: downloadUrl, releaseNotes: json["body"] as? String)
+                if latestSHA != CURRENT_BUILD {
+                    self.showUpdateAvailable(sha: latestSHA, message: commitMessage, url: repoURL)
                 } else if !silent {
-                    // Sin actualizaciones (solo mostrar si el usuario lo pidió manualmente)
                     self.showNoUpdates()
                 }
             }
         }.resume()
     }
 
-    func showUpdateAvailable(version: String, url: String, releaseNotes: String?) {
+    func showUpdateAvailable(sha: String, message: String, url: String) {
         let alert = NSAlert()
-        alert.messageText = "🎉 Actualización disponible: v\(version)"
-        alert.informativeText = releaseNotes.map { notes in
-            "Versión actual: \(CURRENT_VERSION)\n\nNovedades:\n\(notes)"
-        } ?? "Hay una nueva versión disponible (v\(version)).\nVersión actual: \(CURRENT_VERSION)"
+        alert.messageText = "🎉 Hay una actualización disponible"
+        alert.informativeText = "Último cambio: \(message)\n\nVersión instalada: \(CURRENT_BUILD)\nÚltima versión: \(sha)"
         alert.alertStyle = .informational
-        alert.addButton(withTitle: "Descargar")
+        alert.addButton(withTitle: "Ver en GitHub")
         alert.addButton(withTitle: "Ahora no")
 
         if alert.runModal() == .alertFirstButtonReturn {
@@ -211,7 +211,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func showNoUpdates() {
         let alert = NSAlert()
         alert.messageText = "✅ Insomne está al día"
-        alert.informativeText = "Tienes la última versión instalada (v\(CURRENT_VERSION))."
+        alert.informativeText = "Tienes la última versión instalada (v\(CURRENT_BUILD))."
         alert.alertStyle = .informational
         alert.addButton(withTitle: "OK")
         alert.runModal()

@@ -14,13 +14,28 @@ mkdir -p "$MACOS" "$RESOURCES"
 ARCH=$(uname -m)
 TARGET="${ARCH}-apple-macos13.0"
 
+# Obtener el SHA del commit actual (7 caracteres)
+if git -C "$SCRIPT_DIR" rev-parse --short HEAD &>/dev/null; then
+    BUILD_SHA=$(git -C "$SCRIPT_DIR" rev-parse --short HEAD)
+else
+    BUILD_SHA="local"
+fi
+echo "📌 Build SHA: $BUILD_SHA"
+
+# Inyectar el SHA en el código fuente antes de compilar
+SWIFT_SRC="$SCRIPT_DIR/$APP_NAME/main.swift"
+SWIFT_TMP="/tmp/insomne_main_build.swift"
+sed "s/let CURRENT_BUILD  = \"BUILD_SHA\"/let CURRENT_BUILD  = \"$BUILD_SHA\"/" "$SWIFT_SRC" > "$SWIFT_TMP"
+
 swiftc \
-    "$SCRIPT_DIR/$APP_NAME/main.swift" \
+    "$SWIFT_TMP" \
     -o "$MACOS/$APP_NAME" \
     -sdk "$(xcrun --show-sdk-path --sdk macosx)" \
     -target "$TARGET" \
     -framework AppKit \
     -framework Foundation
+
+rm -f "$SWIFT_TMP"
 
 echo "🎨 Generando iconos adaptativos..."
 
