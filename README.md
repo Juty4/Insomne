@@ -21,17 +21,45 @@ Insomne sits in your menu bar and lets you keep your Mac running with the lid cl
 
 ### Install
 
-1. Download `Insomne-1.0.dmg` from the [Releases](https://github.com/Juty4/Insomne/releases) page
-2. Open the DMG and drag **Insomne** to your **Applications** folder
-3. Open Insomne from Spotlight or Finder
-4. On first launch it will ask for your admin password **once** to set up the system command — after that, no password needed while the app is open
+You need Xcode Command Line Tools. If you don't have them, run this first:
 
-> If macOS blocks the app, go to **System Settings → Privacy & Security** and click **Open Anyway**.
+```bash
+xcode-select --install
+```
+
+Then install Insomne:
+
+```bash
+git clone https://github.com/Juty4/Insomne.git
+cd Insomne
+bash build.sh
+```
+
+That's it. The app installs itself in `/Applications` and opens automatically.
+
+> **macOS blocks the app?** Run this in Terminal and try again:
+> ```bash
+> xattr -cr /Applications/Insomne.app && open /Applications/Insomne.app
+> ```
+
+### Create a DMG
+
+To generate a DMG file you can share with others:
+
+```bash
+bash make_dmg.sh
+```
+
+This creates `Insomne-1.0.dmg` in the project folder. The recipient will need to run this after dragging the app to Applications:
+
+```bash
+xattr -cr /Applications/Insomne.app && open /Applications/Insomne.app
+```
 
 ### Uninstall
 
 ```bash
-pkill -9 Insomne 2>/dev/null; rm -rf /Applications/Insomne.app; sudo rm -f /etc/sudoers.d/insomne; rm -f ~/.insomne_state
+curl -fsSL https://raw.githubusercontent.com/Juty4/Insomne/main/uninstall.sh | bash
 ```
 
 ---
@@ -47,22 +75,13 @@ Insomne vive en tu barra de menú y te permite mantener el Mac encendido con la 
 
 ### Instalar
 
-1. Descarga `Insomne-1.0.dmg` desde la página de [Releases](https://github.com/Juty4/Insomne/releases)
-2. Abre el DMG y arrastra **Insomne** a tu carpeta **Aplicaciones**
-3. Abre Insomne desde Spotlight o el Finder
-4. La primera vez pedirá tu contraseña de administrador **una sola vez** para configurar el comando del sistema — a partir de ahí no hace falta mientras la app esté abierta
-
-> Si macOS bloquea la app, ve a **Ajustes del Sistema → Privacidad y Seguridad** y pulsa **Abrir de todas formas**.
-
-### Desinstalar
+Necesitas las Xcode Command Line Tools. Si no las tienes, ejecuta esto primero:
 
 ```bash
-pkill -9 Insomne 2>/dev/null; rm -rf /Applications/Insomne.app; sudo rm -f /etc/sudoers.d/insomne; rm -f ~/.insomne_state
+xcode-select --install
 ```
 
----
-
-## Build from source
+Luego instala Insomne:
 
 ```bash
 git clone https://github.com/Juty4/Insomne.git
@@ -70,7 +89,32 @@ cd Insomne
 bash build.sh
 ```
 
-Requires Xcode Command Line Tools (`xcode-select --install`).
+Listo. La app se instala sola en `/Applications` y se abre automáticamente.
+
+> **¿macOS bloquea la app?** Ejecuta esto en Terminal e inténtalo de nuevo:
+> ```bash
+> xattr -cr /Applications/Insomne.app && open /Applications/Insomne.app
+> ```
+
+### Crear un DMG
+
+Para generar un DMG que puedas compartir con otros:
+
+```bash
+bash make_dmg.sh
+```
+
+Esto crea `Insomne-1.0.dmg` en la carpeta del proyecto. El destinatario deberá ejecutar esto tras arrastrar la app a Aplicaciones:
+
+```bash
+xattr -cr /Applications/Insomne.app && open /Applications/Insomne.app
+```
+
+### Desinstalar
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Juty4/Insomne/main/uninstall.sh | bash
+```
 
 ---
 
@@ -78,3 +122,4 @@ Requires Xcode Command Line Tools (`xcode-select --install`).
 
 - macOS 13 Ventura or later
 - Apple Silicon or Intel
+- Xcode Command Line Tools
