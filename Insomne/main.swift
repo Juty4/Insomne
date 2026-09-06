@@ -175,15 +175,54 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func showUpdateAvailable(sha: String, message: String, url: String) {
         let alert = NSAlert()
         alert.messageText = "🎉 Hay una actualización disponible"
-        alert.informativeText = "Último cambio: \(message)\n\nVersión instalada: \(CURRENT_BUILD)\nÚltima versión: \(sha)"
+        alert.informativeText = "Último cambio: \(message)\n\n¿Quieres actualizar e instalar la nueva versión ahora?"
         alert.alertStyle = .informational
+        
+        alert.addButton(withTitle: "Actualizar automáticamente")
         alert.addButton(withTitle: "Ver en GitHub")
         alert.addButton(withTitle: "Ahora no")
 
-        if alert.runModal() == .alertFirstButtonReturn {
+        let response = alert.runModal()
+        
+        if response == .alertFirstButtonReturn {
+            performAutoUpdate()
+        } else if response == .alertSecondButtonReturn {
             if let downloadURL = URL(string: url) {
                 NSWorkspace.shared.open(downloadURL)
             }
+        }
+    }
+
+    func performAutoUpdate() {
+        let updateScript = """
+        #!/bin/bash
+        sleep 2
+        echo "Iniciando actualización de Insomne..."
+        cd /tmp
+        rm -rf Insomne_updater
+        git clone https://github.com/\\(GITHUB_USER)/\\(GITHUB_REPO).git Insomne_updater
+        cd Insomne_updater
+        bash build.sh
+        cd /tmp
+        rm -rf Insomne_updater
+        """
+        
+        let scriptPath = "/tmp/insomne_update.sh"
+        
+        do {
+            let scriptURL = URL(fileURLWithPath: scriptPath)
+            try updateScript.write(to: scriptURL, atomically: true, encoding: .utf8)
+            
+            let task = Process()
+            task.launchPath = "/usr/bin/nohup"
+            task.arguments = ["/bin/bash", scriptPath]
+            try task.run()
+            
+            NSApplication.shared.terminate(nil)
+            exit(0)
+            
+        } catch {
+            showUpdateError("No se pudo iniciar la actualización automática. Inténtalo de forma manual.")
         }
     }
 
