@@ -13,18 +13,23 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     var statusItem: NSStatusItem!
     var isEnabled: Bool = false
+    
+    // Menú Items almacenados para actualizarlos sin reconstruir el menú
+    var statusMenuItem: NSMenuItem!
+    var toggleMenuItem: NSMenuItem!
 
-    let stateFile = URL(fileURLWithPath: NSHomeDirectory())
-        .appendingPathComponent(".insomne_state")
     let sudoersFile = "/etc/sudoers.d/insomne"
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
 
-        isEnabled = loadState()
+        // Cargar estado desde UserDefaults (Forma nativa de Apple)
+        isEnabled = UserDefaults.standard.bool(forKey: "isInsomneEnabled")
+        
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        updateStatusIcon()
         buildMenu()
+        updateStatusIcon()
+        updateMenuItems()
 
         setupSudoersIfNeeded()
 
@@ -32,25 +37,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         DispatchQueue.global(qos: .background).asyncAfter(deadline: .now() + 2) {
             self.checkForUpdates(silent: true)
         }
-
-        // Escuchar cambios de tema del sistema
-        DistributedNotificationCenter.default().addObserver(
-            self,
-            selector: #selector(themeChanged),
-            name: NSNotification.Name("AppleInterfaceThemeChangedNotification"),
-            object: nil
-        )
-    }
-
-    // MARK: - Tema del sistema
-
-    @objc func themeChanged() {
-        updateStatusIcon()
-    }
-
-    func isDarkMode() -> Bool {
-        let appearance = NSApp.effectiveAppearance
-        return appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
     }
 
     // MARK: - Sudoers
@@ -58,23 +44,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func setupSudoersIfNeeded() {
         guard !FileManager.default.fileExists(atPath: sudoersFile) else { return }
         let username = NSUserName()
-        let rule = "\(username) ALL=(ALL) NOPASSWD: /usr/bin/pmset, /bin/rm"
+        // SEGURIDAD: Solo permitimos pmset. Eliminamos rm para evitar vulnerabilidades críticas.
+        let rule = "\(username) ALL=(ALL) NOPASSWD: /usr/bin/pmset"
         let script = "do shell script \"echo '\(rule)' | tee \(sudoersFile) && chmod 440 \(sudoersFile)\" with administrator privileges"
         DispatchQueue.global(qos: .userInitiated).async {
             var err: NSDictionary?
             NSAppleScript(source: script)?.executeAndReturnError(&err)
         }
-    }
-
-    // MARK: - Estado
-
-    func loadState() -> Bool {
-        let value = try? String(contentsOf: stateFile, encoding: .utf8)
-        return value?.trimmingCharacters(in: .whitespacesAndNewlines) == "1"
-    }
-
-    func saveState(_ enabled: Bool) {
-        try? (enabled ? "1" : "0").write(to: stateFile, atomically: true, encoding: .utf8)
     }
 
     // MARK: - Icon
@@ -83,7 +59,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         guard let button = statusItem?.button else { return }
         let iconName = isEnabled ? "bolt.fill" : "bolt.slash.fill"
         if let image = NSImage(systemSymbolName: iconName, accessibilityDescription: nil) {
-            image.isTemplate = true
+            image.isTemplate = true // macOS cambia el color automáticamente para modo Claro/Oscuro
             button.image = image
         }
         button.toolTip = isEnabled ? "Insomne: Activo" : "Insomne: Inactivo"
@@ -94,36 +70,34 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func buildMenu() {
         let menu = NSMenu()
 
-        let statusLabel = NSMenuItem(
-            title: isEnabled ? "Estado: ✅ Encendido" : "Estado: ⚫ Apagado",
-            action: nil, keyEquivalent: "")
-        statusLabel.isEnabled = false
-        menu.addItem(statusLabel)
+        statusMenuItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+        statusMenuItem.isEnabled = false
+        menu.addItem(statusMenuItem)
+        
         menu.addItem(.separator())
 
-        let toggleItem = NSMenuItem(
-            title: isEnabled ? "Apagar" : "Encender",
-            action: #selector(toggleLidLock), keyEquivalent: "t")
-        toggleItem.target = self
-        menu.addItem(toggleItem)
+        toggleMenuItem = NSMenuItem(title: "", action: #selector(toggleLidLock), keyEquivalent: "t")
+        toggleMenuItem.target = self
+        menu.addItem(toggleMenuItem)
 
         menu.addItem(.separator())
 
-        let updateItem = NSMenuItem(
-            title: "Buscar actualizaciones",
-            action: #selector(checkUpdatesManual), keyEquivalent: "u")
+        let updateItem = NSMenuItem(title: "Buscar actualizaciones", action: #selector(checkUpdatesManual), keyEquivalent: "u")
         updateItem.target = self
         menu.addItem(updateItem)
 
         menu.addItem(.separator())
 
-        let quitItem = NSMenuItem(
-            title: "Cerrar aplicación",
-            action: #selector(quitApp), keyEquivalent: "q")
+        let quitItem = NSMenuItem(title: "Cerrar aplicación", action: #selector(quitApp), keyEquivalent: "q")
         quitItem.target = self
         menu.addItem(quitItem)
 
         statusItem.menu = menu
+    }
+    
+    func updateMenuItems() {
+        statusMenuItem.title = isEnabled ? "Estado: ✅ Encendido" : "Estado: ⚫ Apagado"
+        toggleMenuItem.title = isEnabled ? "Apagar" : "Encender"
     }
 
     // MARK: - Toggle
@@ -134,11 +108,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self = self else { return }
             if self.runPmset(value: newValue) {
                 let nowEnabled = newValue == "1"
-                self.saveState(nowEnabled)
+                
+                // Guardar estado de forma nativa
+                UserDefaults.standard.set(nowEnabled, forKey: "isInsomneEnabled")
+                
                 DispatchQueue.main.async {
                     self.isEnabled = nowEnabled
                     self.updateStatusIcon()
-                    self.buildMenu()
+                    self.updateMenuItems()
                 }
             }
         }
@@ -151,7 +128,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func checkForUpdates(silent: Bool) {
-        // Compara el SHA del último commit en main con el que tiene instalado
         let urlString = "https://api.github.com/repos/\(GITHUB_USER)/\(GITHUB_REPO)/commits/main"
         guard let url = URL(string: urlString) else { return }
 
@@ -161,7 +137,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         URLSession.shared.dataTask(with: request) { data, response, error in
             guard let data = data, error == nil else {
-                if !silent { DispatchQueue.main.async { self.showUpdateError() } }
+                if !silent { DispatchQueue.main.async { self.showUpdateError("Error de conexión a internet.") } }
+                return
+            }
+            
+            if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 403 {
+                if !silent { DispatchQueue.main.async { self.showUpdateError("Límite de peticiones de GitHub alcanzado. Intenta de nuevo en una hora.") } }
                 return
             }
 
@@ -169,22 +150,20 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                 let sha = json["sha"] as? String
             else {
-                if !silent { DispatchQueue.main.async { self.showUpdateError() } }
+                if !silent { DispatchQueue.main.async { self.showUpdateError("Respuesta inválida del servidor.") } }
                 return
             }
 
-            // SHA corto (7 caracteres) para comparar
             let latestSHA = String(sha.prefix(7))
             let repoURL = "https://github.com/\(GITHUB_USER)/\(GITHUB_REPO)"
 
-            // Leer el mensaje del último commit
             let commitMessage = (json["commit"] as? [String: Any])
                 .flatMap { $0["message"] as? String }
                 .map { $0.components(separatedBy: "\n").first ?? $0 }
                 ?? "Nueva actualización disponible"
 
             DispatchQueue.main.async {
-                if latestSHA != CURRENT_BUILD {
+                if latestSHA != CURRENT_BUILD && CURRENT_BUILD != "BUILD_SHA" {
                     self.showUpdateAvailable(sha: latestSHA, message: commitMessage, url: repoURL)
                 } else if !silent {
                     self.showNoUpdates()
@@ -217,10 +196,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         alert.runModal()
     }
 
-    func showUpdateError() {
+    func showUpdateError(_ message: String) {
         let alert = NSAlert()
         alert.messageText = "No se pudo comprobar actualizaciones"
-        alert.informativeText = "Comprueba tu conexión a internet e inténtalo de nuevo."
+        alert.informativeText = message
         alert.alertStyle = .warning
         alert.addButton(withTitle: "OK")
         alert.runModal()
@@ -229,16 +208,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Quit
 
     @objc func quitApp() {
-        if isEnabled { _ = runPmset(value: "0"); saveState(false) }
-        let task = Process()
-        task.launchPath = "/usr/bin/sudo"
-        task.arguments = ["rm", "-f", sudoersFile]
-        task.standardOutput = Pipe(); task.standardError = Pipe()
-        try? task.run(); task.waitUntilExit()
-        DispatchQueue.main.async {
-            NSApplication.shared.terminate(nil)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { exit(0) }
+        if isEnabled { 
+            _ = runPmset(value: "0")
+            UserDefaults.standard.set(false, forKey: "isInsomneEnabled") 
         }
+        
+        // SEGURIDAD: Ya no ejecutamos `sudo rm` al cerrar la aplicación.
+        // El archivo sudoers se mantendrá para no pedir la contraseña en el futuro,
+        // y se eliminará de forma segura solo usando uninstall.sh.
+        
+        NSApplication.shared.terminate(nil)
+        exit(0)
     }
 
     // MARK: - pmset
