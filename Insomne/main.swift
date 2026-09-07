@@ -200,7 +200,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         echo "Iniciando actualización de Insomne..."
         cd /tmp
         rm -rf Insomne_updater
-        git clone https://github.com/\\(GITHUB_USER)/\\(GITHUB_REPO).git Insomne_updater
+        git clone https://github.com/\(GITHUB_USER)/\(GITHUB_REPO).git Insomne_updater
         cd Insomne_updater
         bash build.sh
         cd /tmp
