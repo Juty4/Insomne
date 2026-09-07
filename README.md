@@ -123,3 +123,4 @@ curl -fsSL https://raw.githubusercontent.com/Juty4/Insomne/main/uninstall.sh | b
 - macOS 13 Ventura or later
 - Apple Silicon or Intel
 - Xcode Command Line Tools
+
