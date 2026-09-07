@@ -37,38 +37,16 @@ swiftc \
 
 rm -f "$SWIFT_TMP"
 
-echo "🎨 Generando iconos adaptativos..."
+echo "🎨 Generando icono de la aplicación..."
 
-if [ -d "/Applications/Xcode.app" ]; then
-    echo "⚙️ Usando Xcode actool para generar icono dinámico (Soporta Modo Oscuro nativo)..."
-    export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
-    ASSETS_DIR="/tmp/InsomneAssets.xcassets"
-    APPICON_SET="$ASSETS_DIR/AppIcon.appiconset"
-    mkdir -p "$APPICON_SET"
-    
-    cat > "$APPICON_SET/Contents.json" << 'EOF'
-{
-  "images" : [
-    { "idiom" : "mac", "size" : "512x512", "scale" : "1x", "filename" : "light.png" },
-    { "idiom" : "mac", "size" : "512x512", "scale" : "1x", "filename" : "dark.png", "appearances" : [ { "appearance" : "luminosity", "value" : "dark" } ] }
-  ],
-  "info" : { "version" : 1, "author" : "xcode" }
-}
-EOF
-    cp "$SCRIPT_DIR/InsomneLight.iconset/icon_512x512.png" "$APPICON_SET/light.png" 2>/dev/null || true
-    cp "$SCRIPT_DIR/InsomneDark.iconset/icon_512x512.png" "$APPICON_SET/dark.png" 2>/dev/null || true
-
-    xcrun actool "$ASSETS_DIR" --compile "$RESOURCES" --platform macosx --minimum-deployment-target 13.0 --app-icon AppIcon --output-partial-info-plist /tmp/PartialInfo.plist > /dev/null
-    rm -rf "$ASSETS_DIR"
-else
-    # Fallback si no hay Xcode completo: Compilar .icns estático usando iconutil
-    if [ "$(defaults read -g AppleInterfaceStyle 2>/dev/null)" == "Dark" ] && [ -d "$SCRIPT_DIR/InsomneDark.iconset" ]; then
-        iconutil -c icns "$SCRIPT_DIR/InsomneDark.iconset" -o "$RESOURCES/AppIcon.icns"
-        echo "🌙 Aplicando icono de Modo Oscuro al empaquetado (Estático)"
-    elif [ -d "$SCRIPT_DIR/InsomneLight.iconset" ]; then
-        iconutil -c icns "$SCRIPT_DIR/InsomneLight.iconset" -o "$RESOURCES/AppIcon.icns"
-        echo "☀️ Aplicando icono de Modo Claro al empaquetado (Estático)"
-    fi
+# macOS NO soporta iconos de aplicación (Finder/Dock) que cambien dinámicamente con el Modo Oscuro.
+# Por lo tanto, usamos la versión Oscura (InsomneDark) por defecto.
+if [ -d "$SCRIPT_DIR/InsomneDark.iconset" ]; then
+    iconutil -c icns "$SCRIPT_DIR/InsomneDark.iconset" -o "$RESOURCES/AppIcon.icns"
+    echo "🌙 Aplicando icono Oscuro"
+elif [ -d "$SCRIPT_DIR/InsomneLight.iconset" ]; then
+    iconutil -c icns "$SCRIPT_DIR/InsomneLight.iconset" -o "$RESOURCES/AppIcon.icns"
+    echo "☀️ Aplicando icono Claro"
 fi
 
 cat > "$CONTENTS/Info.plist" << 'PLIST'
