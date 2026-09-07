@@ -14,7 +14,9 @@ rm -rf /Applications/Insomne.app
 sudo rm -f /etc/sudoers.d/insomne
 
 # Estado
-rm -f ~/.insomne_state
+# Estado nativo
+defaults delete $APP_ID 2>/dev/null || true
+rm -f ~/Library/Preferences/$APP_ID.plist
 
 # Caches de usuario
 rm -rf ~/Library/Caches/$APP_ID

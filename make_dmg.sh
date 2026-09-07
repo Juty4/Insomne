@@ -3,7 +3,7 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 APP_NAME="Insomne"
-VERSION="1.0"
+VERSION="2.0"
 DMG_NAME="${APP_NAME}-${VERSION}.dmg"
 WORK_DIR="$SCRIPT_DIR/dmg_work"
 STAGING="$WORK_DIR/staging"

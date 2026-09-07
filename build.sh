@@ -28,6 +28,7 @@ SWIFT_TMP="/tmp/insomne_main_build.swift"
 sed "s/let CURRENT_BUILD  = \"BUILD_SHA\"/let CURRENT_BUILD  = \"$BUILD_SHA\"/" "$SWIFT_SRC" > "$SWIFT_TMP"
 
 swiftc \
+    -O \
     "$SWIFT_TMP" \
     -o "$MACOS/$APP_NAME" \
     -sdk "$(xcrun --show-sdk-path --sdk macosx)" \
@@ -37,17 +38,14 @@ swiftc \
 
 rm -f "$SWIFT_TMP"
 
-echo "🎨 Generando icono de la aplicación..."
+echo "🎨 Generando iconos de la aplicación..."
 
-# macOS NO soporta iconos de aplicación (Finder/Dock) que cambien dinámicamente con el Modo Oscuro.
-# Por lo tanto, usamos la versión Oscura (InsomneDark) por defecto.
-if [ -d "$SCRIPT_DIR/InsomneDark.iconset" ]; then
-    iconutil -c icns "$SCRIPT_DIR/InsomneDark.iconset" -o "$RESOURCES/AppIcon.icns"
-    echo "🌙 Aplicando icono Oscuro"
-elif [ -d "$SCRIPT_DIR/InsomneLight.iconset" ]; then
-    iconutil -c icns "$SCRIPT_DIR/InsomneLight.iconset" -o "$RESOURCES/AppIcon.icns"
-    echo "☀️ Aplicando icono Claro"
-fi
+# Generar ambos iconos y guardarlos en Resources para que la app pueda intercambiarlos en Ajustes
+iconutil -c icns "$SCRIPT_DIR/InsomneDark.iconset" -o "$RESOURCES/AppIconDark.icns"
+iconutil -c icns "$SCRIPT_DIR/InsomneLight.iconset" -o "$RESOURCES/AppIconLight.icns"
+
+# Por defecto, usamos el oscuro
+cp "$RESOURCES/AppIconDark.icns" "$RESOURCES/AppIcon.icns"
 
 cat > "$CONTENTS/Info.plist" << 'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
@@ -65,9 +63,9 @@ cat > "$CONTENTS/Info.plist" << 'PLIST'
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.0</string>
+    <string>2.0</string>
     <key>CFBundleVersion</key>
-    <string>1</string>
+    <string>2</string>
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>
     <key>LSMinimumSystemVersion</key>
